@@ -1,0 +1,8 @@
+torch>=1.1
+scikit-learn
+numpy==1.21.6
+pandas
+tqdm
+lmdb
+onnx
+onnxruntime
