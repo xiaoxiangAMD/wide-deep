@@ -14,6 +14,7 @@ import random
 seed = 123
 torch.manual_seed(seed)
 random.seed(seed)
+import time
 
 def get_dataset(name, path):
     if name == 'criteo':
@@ -82,6 +83,17 @@ def test(model, data_loader, device):
             predicts.extend(y.tolist())
     return roc_auc_score(targets, predicts)
 
+def get_latency(model,data_loader,device):
+    model.eval()
+    data_len= len(data_loader.dataset)
+    start_time = time.time()  
+    with torch.no_grad():
+        for fields, _ in tqdm.tqdm(data_loader, smoothing=0, mininterval=1.0):
+            fields = fields.to(device)
+            model(fields)
+    inference_time = time.time() - start_time
+    latency = inference_time / data_len 
+    print('Inference latency: {:.8f} ms'.format(latency * 1000))  
 
 def main(dataset_name,
          dataset_path,
@@ -94,8 +106,9 @@ def main(dataset_name,
          save_dir):
     device = torch.device(device)
     dataset = get_dataset(dataset_name, dataset_path)
-    train_length = int(len(dataset) * 0.8)
-    valid_length = int(len(dataset) * 0.1)
+    print("length is " ,len(dataset[0][0]))
+    train_length = int(len(dataset) * 1.0)
+    valid_length = int(len(dataset) * 0)
     test_length = len(dataset) - train_length - valid_length
     train_dataset, valid_dataset, test_dataset = torch.utils.data.random_split(
         dataset, (train_length, valid_length, test_length))
@@ -116,8 +129,9 @@ def main(dataset_name,
     #    if not early_stopper.is_continuable(model, auc):
     #        print(f'validation: best auc: {early_stopper.best_accuracy}')
     #        break
-    auc = test(model, test_data_loader, device)
-    print(f'test auc: {auc}')
+    ##auc = test(model, test_data_loader, device)
+    ##print(f'test auc: {auc}')
+    get_latency(model, train_data_loader,device)
 
 
 if __name__ == '__main__':

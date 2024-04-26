@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 
 from torchfm.dataset.criteo import CriteoDataset
 from torchfm.model.wd import WideAndDeepModel
-
+import time
 
 def get_dataset(name, path):
     if name == 'criteo':
@@ -79,6 +79,16 @@ def test(model, data_loader, device):
             predicts.extend(y.tolist())
     return roc_auc_score(targets, predicts)
 
+def get_latency(model,data_loader,device):
+    model.eval()
+    data_len= len(data_loader.dataset)
+    with torch.no_grad():
+        for fields, _ in tqdm.tqdm(data_loader, smoothing=0, mininterval=1.0):
+            fields = fields.to(device)
+            model(fields)
+    inference_time = time.time() - start_time
+    latency = inference_time / data_len 
+    print('Inference latency: {:.2f} ms'.format(latency * 1000))  
 
 def main(dataset_name,
          dataset_path,

@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 
 from torchfm.dataset.criteo import CriteoDataset
 from torchfm.model.wd import WideAndDeepModel
-
+import time
 import random
 seed = 123
 torch.manual_seed(seed)
@@ -103,6 +103,18 @@ def test_onnx(model,wd_output_name, data_loader, device):
             predicts.extend(y.tolist())
     return roc_auc_score(targets, predicts)
 
+def get_latency(model,wd_output_name,data_loader,device):
+    ##model.eval()
+    data_len= len(data_loader.dataset)
+    start_time = time.time()  
+    with torch.no_grad():
+        for fields, _ in tqdm.tqdm(data_loader, smoothing=0, mininterval=1.0):
+            fields = fields.to(device)
+            ort_inputs = {model.get_inputs()[0].name: to_numpy(fields)}
+            model.run([wd_output_name],ort_inputs)[0]
+    inference_time = time.time() - start_time
+    latency = inference_time / data_len 
+    print('Inference latency: {:.8f} ms'.format(latency * 1000))  
 def main(dataset_name,
          dataset_path,
          model_name,
@@ -129,6 +141,14 @@ def main(dataset_name,
 
     auc = test_onnx(wd, wd_output_name,test_data_loader, device)
     print(f'test auc: {auc}')
+    train_length = int(len(dataset) * 1)
+    valid_length = int(len(dataset) * 0)
+    test_length = len(dataset) - train_length - valid_length
+    train_dataset, valid_dataset, test_dataset = torch.utils.data.random_split(
+        dataset, (train_length, valid_length, test_length))
+    batch_size=2048
+    train_data_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=8)
+    get_latency(wd,wd_output_name,train_data_loader,device)
 
 
 if __name__ == '__main__':

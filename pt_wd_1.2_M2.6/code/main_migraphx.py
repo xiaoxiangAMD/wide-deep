@@ -17,7 +17,7 @@ import random
 seed = 123
 torch.manual_seed(seed)
 random.seed(seed)
-
+import time
 def get_dataset(name, path):
     if name == 'criteo':
         return CriteoDataset(path)
@@ -100,6 +100,22 @@ def test_migraphx(model, data_loader, device, batch_size):
             predicts.extend(outputs.tolist()[0:batch_size_test])
     return roc_auc_score(targets, predicts)
 
+def get_latency(model,data_loader,device):
+    ##model.eval()
+    batch_size=2048
+    data_len= len(data_loader.dataset)
+    start_time = time.time()  
+    with torch.no_grad():
+        for fields, _ in tqdm.tqdm(data_loader, smoothing=0, mininterval=1.0):
+            fields = fields.to(device)
+            inputs=fields.cpu().numpy()
+            batch_size_test = inputs.shape[0]
+            if batch_size_test < batch_size:
+                inputs = np.pad(inputs,((0,batch_size-batch_size_test),(0,0)))
+            model.run({"input": inputs})[0]
+    inference_time = time.time() - start_time
+    latency = inference_time / data_len 
+    print('Inference latency: {:.8f} ms'.format(latency * 1000))  
 def main(dataset_name,
          dataset_path,
          model_name,
@@ -127,6 +143,14 @@ def main(dataset_name,
     model.compile(migraphx.get_target("gpu"))
     auc = test_migraphx(model, test_data_loader, device,batch_size)
     print(f'test auc: {auc}')
+    train_length = int(len(dataset) * 1)
+    valid_length = int(len(dataset) * 0)
+    test_length = len(dataset) - train_length - valid_length
+    train_dataset, valid_dataset, test_dataset = torch.utils.data.random_split(
+        dataset, (train_length, valid_length, test_length))
+    batch_size=1024
+    train_data_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=8)
+    get_latency(model,train_data_loader,device)
 
 
 if __name__ == '__main__':
@@ -138,7 +162,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_name', default='wd')
     parser.add_argument('--epoch', type=int, default=1)
     parser.add_argument('--learning_rate', type=float, default=0.001)
-    parser.add_argument('--batch_size', type=int, default=1024)
+    parser.add_argument('--batch_size', type=int, default=2048)
     parser.add_argument('--weight_decay', type=float, default=1e-6)
     parser.add_argument('--device', default='cuda:0')
     parser.add_argument('--save_dir', default='./float/wd.pt')
